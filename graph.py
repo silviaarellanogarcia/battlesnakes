@@ -5,6 +5,7 @@ class Graph(metaclass=SingletonMeta):
         self.size = size
         self.graph = {}
         self.build_graph()
+        self.target_cells = {}
 
     def build_graph(self):
         rows, cols = self.size
@@ -43,35 +44,50 @@ class Graph(metaclass=SingletonMeta):
         dy = n1[1] - n2[1]
         return (dx, dy)
 
-    def flood_fill(self, start_node, blocked, max_steps=1000):
+    @staticmethod
+    def sum(n1, n2):
+        dx = n1[0] + n2[0]        
+        dy = n1[1] + n2[1]
+        return (dx, dy)
+
+    def flood_fill(self, start_node, blocked, max_steps=None):
         visited = set()
+        blocking = {}
         to_explore = [(start_node, 0)]  # Tuple: (node, steps)
         while to_explore:
             current_node, steps = to_explore.pop()
             visited.add(current_node)
-            if steps >= max_steps:  # Stop exploration if reached max steps
+            if max_steps is not None and steps >= max_steps:  # Stop exploration if reached max steps
                 continue
             for neighbor in self.get_neighbors(current_node):
-                if neighbor not in visited and neighbor not in blocked:
-                    to_explore.append((neighbor, steps + 1))
-        return visited
+                if neighbor not in visited:
+                    block_score = blocked.get(neighbor, None)
+                    if block_score is None:
+                        to_explore.append((neighbor, steps + 1))
+                    else:
+                        blocking[neighbor] = block_score
+        return visited, blocking
 
     def get_neighbor_info(self, node, blocked):
         neighbor_info = {}
         for neighbor in self.get_neighbors(node):
             if neighbor not in blocked:
-                available_cells = self.flood_fill(neighbor, blocked)
+                connected = []
+                available_cells = None
+                blocking_cells = None
+                for neighbor2 in list(neighbor_info.keys()):
+                    if neighbor in neighbor_info[neighbor2]['cells']:
+                        connected.append(neighbor2)
+                        neighbor_info[neighbor2]['connected'].append(neighbor)
+                        available_cells = neighbor_info[neighbor2]['cells']
+                        blocking_cells = neighbor_info[neighbor2]['block']
+
+                if available_cells is None:
+                    available_cells, blocking_cells = self.flood_fill(neighbor, blocked)
                 neighbor_info[neighbor] = {
                     'cells': available_cells,
-                    'n_cells': len(available_cells)
+                    'block': blocking_cells,
+                    'n_cells': len(available_cells),
+                    'connected': connected
                 }
-        keys = list(neighbor_info.keys())
-        for key in keys:
-            connected_with = set()
-            first_set = neighbor_info[key]['cells']
-            for key2 in keys:
-                if key != key2 and first_set.intersection(neighbor_info[key2]['cells']):
-                    connected_with.add(key2)
-            neighbor_info[key]['connected'] = connected_with
-                
         return neighbor_info

@@ -20,11 +20,10 @@ class AStar:
         f_score = {node: float('inf') for node in self.graph.graph}
         f_score[start] = self.heuristic(start, goals)
         visited = set()
-        start_info = self.graph.get_neighbor_info(start, occupied_cells)
 
         while open_set:
             current_f, current = heapq.heappop(open_set)
-            if current in goals:
+            if current in goals and current not in occupied_cells.keys():
                 path = self.reconstruct_path(came_from, current)
                 return path
 
@@ -33,12 +32,8 @@ class AStar:
             visited.add(current)
 
             for neighbor in self.graph.get_neighbors(current):
-                if neighbor in occupied_cells:
+                if neighbor in occupied_cells.keys():
                     continue
-                if neighbor in start_info:
-                    neighbor_info = start_info[neighbor]
-                    if len(neighbor_info['connected']) == 0 and neighbor_info['n_cells'] < snake_size + 2:
-                        continue
                 tentative_g_score = g_score[current] + 1
                 if tentative_g_score < g_score[neighbor]:
                     came_from[neighbor] = current
