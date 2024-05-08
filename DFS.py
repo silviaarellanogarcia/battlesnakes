@@ -7,12 +7,14 @@ class DFS:
     def calculate_paths_to_goals(self, start, goals):
         paths_to_goals = {goal: [] for goal in goals}
         queue = deque([(start, [start])])  # (node, path)
+        first = True
         while queue:
             current_node, path = queue.popleft()
-            if current_node in goals.keys():
+            if not first and current_node in goals.keys():
                 if len(path) > len(paths_to_goals[current_node]):
                     paths_to_goals[current_node] = path
             else:
+                first = False
                 for neighbor in self.graph.get_neighbors(current_node):
                     if neighbor not in path:
                         new_path = path + [neighbor]
@@ -29,7 +31,7 @@ class DFS:
         for goal, steps in goals.items():
             path = paths_to_goals[goal]
             score = len(path) - steps
-            print(f"GOAL: {goal}, score: {score}")
+            print(f"GOAL: {goal}, len: {len(path)}, steps: {steps}, score: {score}")
             if score > best_score:
                 best_path = path
                 best_score = score
