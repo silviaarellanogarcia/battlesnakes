@@ -12,7 +12,7 @@ class AStar:
         
         return min_value
 
-    def astar(self, start, goals, occupied_cells):
+    def astar(self, start, goals, occupied_cells, snake_size):
         open_set = [(0, start)]  # Priority queue of (f_score, node)
         came_from = {}  # Parent pointers
         g_score = {node: float('inf') for node in self.graph.graph}
@@ -20,6 +20,7 @@ class AStar:
         f_score = {node: float('inf') for node in self.graph.graph}
         f_score[start] = self.heuristic(start, goals)
         visited = set()
+        start_info = self.graph.get_neighbor_info(start, occupied_cells)
 
         while open_set:
             current_f, current = heapq.heappop(open_set)
@@ -34,6 +35,10 @@ class AStar:
             for neighbor in self.graph.get_neighbors(current):
                 if neighbor in occupied_cells:
                     continue
+                if neighbor in start_info:
+                    neighbor_info = start_info[neighbor]
+                    if len(neighbor_info['connected']) == 0 and neighbor_info['n_cells'] < snake_size + 2:
+                        continue
                 tentative_g_score = g_score[current] + 1
                 if tentative_g_score < g_score[neighbor]:
                     came_from[neighbor] = current
