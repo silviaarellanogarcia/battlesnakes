@@ -62,7 +62,7 @@ class Graph(metaclass=SingletonMeta):
             for neighbor in self.get_neighbors(current_node):
                 if neighbor not in visited:
                     block_score = blocked.get(neighbor, None)
-                    if block_score is None:
+                    if block_score is None or block_score < steps:
                         to_explore.append((neighbor, steps + 1))
                     else:
                         blocking[neighbor] = block_score
@@ -89,5 +89,12 @@ class Graph(metaclass=SingletonMeta):
                     'block': blocking_cells,
                     'n_cells': len(available_cells),
                     'connected': connected
+                }
+            else:
+                neighbor_info[neighbor] = {
+                    'cells': set(),
+                    'block': {neighbor: blocked[neighbor]},
+                    'n_cells': 0,
+                    'connected': []
                 }
         return neighbor_info

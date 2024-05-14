@@ -13,7 +13,7 @@ class AStar:
         return min_value
 
     def astar(self, start, goals, occupied_cells, snake_size):
-        open_set = [(0, start)]  # Priority queue of (f_score, node)
+        open_set = [(0, start, 0)]  # Priority queue of (f_score, node, n_path)
         came_from = {}  # Parent pointers
         g_score = {node: float('inf') for node in self.graph.graph}
         g_score[start] = 0
@@ -22,7 +22,7 @@ class AStar:
         visited = set()
 
         while open_set:
-            current_f, current = heapq.heappop(open_set)
+            current_f, current, n_path = heapq.heappop(open_set)
             if current in goals and current not in occupied_cells.keys():
                 path = self.reconstruct_path(came_from, current)
                 return path
@@ -32,14 +32,15 @@ class AStar:
             visited.add(current)
 
             for neighbor in self.graph.get_neighbors(current):
-                if neighbor in occupied_cells.keys():
+                occupied_score = occupied_cells.get(neighbor, None)
+                if occupied_score is not None and occupied_score > n_path + 1:
                     continue
                 tentative_g_score = g_score[current] + 1
                 if tentative_g_score < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g_score
                     f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, goals)
-                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor, n_path + 1))
 
         return None  # No path found
 

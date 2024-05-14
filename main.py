@@ -51,6 +51,7 @@ def move(game_state: typing.Dict) -> typing.Dict:
     astar = AStar(graph)
     dfs = DFS(graph)
     my_id = game_state['you']['id']
+    my_name = game_state['you']['name']
     my_length = game_state['you']['length']
 
     move_set = {
@@ -68,15 +69,23 @@ def move(game_state: typing.Dict) -> typing.Dict:
     # opponents = game_state['board']['snakes']
 
     occupied_cells = {}
+    friend_ways = []
     for snake in game_state['board']['snakes']:
         for num, cell in enumerate(snake['body']):
-            occupied_cells[graph.convert_to_tuple(cell)] = snake['length'] - num
+            occupied_cells[graph.convert_to_tuple(cell)] = snake['length'] - num + 1
 
-        if snake['length'] >= my_length and snake['id'] != my_id:
+        if snake['id'] != my_id and snake['length'] >= my_length:
             for move in move_set.keys():
                 future_pos = graph.sum(graph.convert_to_tuple(snake['head']), move)
-                occupied_cells[future_pos] = snake['length'] + 1
-    
+                if future_pos not in occupied_cells.keys():
+                    occupied_cells[future_pos] = snake['length'] + 1
+
+        if snake['id'] != my_id and my_name == snake['name']:
+            for move in move_set.keys():
+                future_pos = graph.sum(graph.convert_to_tuple(snake['head']), move)
+                if future_pos not in occupied_cells.keys():
+                    occupied_cells[future_pos] = snake['length'] + 1
+                    friend_ways.append(future_pos)
 
     food_cells = set()
     for food in game_state['board']['food']:
@@ -88,27 +97,36 @@ def move(game_state: typing.Dict) -> typing.Dict:
     closed_sides = []
     block_closed_sides = {}
     safe_cells = set()
+    blocked_future = set()
     for side, info in start_info.items():
         if info['n_cells'] <= my_length + 2:
+            if info['n_cells'] == 0:
+                blocked_future.add(side)
             closed_sides.append(side)
             block_closed_sides.update(info['block'])
         else:
             safe_cells |= info['cells']
 
     path = None
-    if len(closed_sides) >= len(start_info.keys()):
-        path = dfs.choose_paths_to_scape(position, block_closed_sides)
-    else:
+    if len(closed_sides) >= len(start_info.keys()) and len(blocked_future) != len(start_info.keys()):
+        print('DFS')
+        path = dfs.choose_paths_to_scape(position, block_closed_sides, max_depth=15)
+    elif len(blocked_future) != len(start_info.keys()):
         for side in closed_sides:
-            occupied_cells[side] = None # Think about this if some change on a*
+            occupied_cells[side] = 10 # Think about this if some change on a*
             food_cells = food_cells - start_info[side]['cells']
 
         for k, v in graph.target_cells.items():
             if k != my_id and v is not None and v in food_cells:
                 food_cells.remove(v)
 
+        for food in list(food_cells):
+            if food in occupied_cells.keys():
+                food_cells.remove(food)
+
         if len(food_cells) == 0:
-            food_cells.add(random.choice(list(safe_cells)))
+            for _ in range(3):
+                food_cells.add(random.choice(list(safe_cells)))
 
         path = astar.astar(
            position, food_cells, occupied_cells, len(game_state['you']['body']))
@@ -122,12 +140,16 @@ def move(game_state: typing.Dict) -> typing.Dict:
     #print('OCC: %s' % str(occupied_cells))
     #print('FOOD: %s' % str(food_cells))
     #print('PATH: %s' % str(astar_path))
-
-    if path is None:
+    next_move = None
+    if len(blocked_future) == len(start_info.keys()):
+        for future in graph.get_neighbors(position):
+            if future in friend_ways:
+                next_move = move_set[graph.difference(future, position)]
+    if path is None and next_move is None:
         print("RANDOM")
         next_move = choose_safe_random_move(game_state)
         
-    else:
+    elif next_move is None:
         next_move = graph.difference(path[1], position)
         next_move = move_set[next_move]
 
