@@ -1,7 +1,10 @@
 from singleton import SingletonMeta
 
 class Graph(metaclass=SingletonMeta):
-    def __init__(self, size):
+    def __init__(self):
+        self.reset((0, 0))
+
+    def reset(self, size):
         self.size = size
         self.graph = {}
         self.build_graph()
@@ -51,12 +54,14 @@ class Graph(metaclass=SingletonMeta):
         return (dx, dy)
 
     def flood_fill(self, start_node, blocked, max_steps=None):
+        v_steps = {}
         visited = set()
         blocking = {}
         to_explore = [(start_node, 0)]  # Tuple: (node, steps)
         while to_explore:
             current_node, steps = to_explore.pop()
             visited.add(current_node)
+            v_steps[current_node] = steps
             if max_steps is not None and steps >= max_steps:  # Stop exploration if reached max steps
                 continue
             for neighbor in self.get_neighbors(current_node):
@@ -64,37 +69,43 @@ class Graph(metaclass=SingletonMeta):
                     block_score = blocked.get(neighbor, None)
                     if block_score is None or block_score < steps:
                         to_explore.append((neighbor, steps + 1))
+                    elif block_score == 1:
+                        to_explore.append((neighbor, steps + 1))
                     else:
                         blocking[neighbor] = block_score
-        return visited, blocking
+        return visited, blocking, v_steps
 
-    def get_neighbor_info(self, node, blocked):
+    def get_neighbor_info(self, node, blocked, snake_size):
         neighbor_info = {}
         for neighbor in self.get_neighbors(node):
             if neighbor not in blocked:
                 connected = []
                 available_cells = None
                 blocking_cells = None
+                steps_cells = None
                 for neighbor2 in list(neighbor_info.keys()):
-                    if neighbor in neighbor_info[neighbor2]['cells']:
+                    if neighbor_info[neighbor2]['steps'].get(neighbor, 10000) < snake_size:
                         connected.append(neighbor2)
                         neighbor_info[neighbor2]['connected'].append(neighbor)
                         available_cells = neighbor_info[neighbor2]['cells']
                         blocking_cells = neighbor_info[neighbor2]['block']
+                        steps_cells = neighbor_info[neighbor2]['steps']
 
                 if available_cells is None:
-                    available_cells, blocking_cells = self.flood_fill(neighbor, blocked)
+                    available_cells, blocking_cells, steps_cells = self.flood_fill(neighbor, blocked)
                 neighbor_info[neighbor] = {
                     'cells': available_cells,
                     'block': blocking_cells,
                     'n_cells': len(available_cells),
-                    'connected': connected
+                    'connected': connected,
+                    'steps': steps_cells
                 }
             else:
                 neighbor_info[neighbor] = {
                     'cells': set(),
                     'block': {neighbor: blocked[neighbor]},
                     'n_cells': 0,
-                    'connected': []
+                    'connected': [],
+                    'steps': {}
                 }
         return neighbor_info

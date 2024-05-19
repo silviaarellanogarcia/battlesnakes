@@ -13,11 +13,54 @@
 import random
 import typing
 import json
+import replit
 
 from graph import Graph
 from astar import AStar
 from DFS import DFS
-from utils import choose_safe_random_move
+
+SNAKE_NAMES = ["Chimuelo Dev", "Chimuelo"]
+
+save_data = replit.db
+
+def save_info_start(data):
+    game_id = data.get("game", {}).get("id", None)
+    snake_names = ' | '.join(sorted([snake['name'] for snake in data['board']['snakes']]))
+    games = save_data.get('games', {})
+    snake_names_games = games.get(snake_names, {})
+    translate = save_data.get('translate', {})
+    translate[game_id] = snake_names
+    snake_names_games[game_id] = {'count': len(snake_names_games)}
+    games[snake_names] = snake_names_games
+    save_data['games'] = games
+    save_data['translate'] = translate
+
+def deep_copy_observable_dict(src):
+    if not hasattr(src, "items"):
+        return src
+
+    copy = {}
+    for key, value in src.items():
+        if hasattr(src, "items"):
+            copy[key] = deep_copy_observable_dict(value)
+        else:
+            copy[key] = value
+    return copy
+
+def save_info_end(data):
+    result = ' | '.join(sorted([snake['name'] for snake in data['board']['snakes']]))
+    game_id = data.get("game", {}).get("id", None)
+    translate = save_data.get('translate', {})
+    snake_names = translate[game_id]
+
+    games = save_data.get('games', {})
+    snake_names_games = games.get(snake_names, {})
+    game = snake_names_games.get(game_id, {})
+    game['result'] = result
+    games[snake_names] = snake_names_games
+    save_data['games'] = games
+    with open('data.json', 'w') as f:
+        json.dump(deep_copy_observable_dict(dict(save_data)), f, indent=4)
 
 # info is called when you create your Battlesnake on play.battlesnake.com
 # and controls your Battlesnake's appearance
@@ -34,9 +77,12 @@ def info() -> typing.Dict:
 
 # start is called when your Battlesnake begins a game
 def start(game_state: typing.Dict):
-    Graph((game_state['board']['width'], game_state['board']['height']))
+    game = Graph()
+    game.reset((game_state['board']['width'], game_state['board']['height']))
     print("GAME START")
-    #print(json.dumps(game_state))
+    save_info_start(game_state)
+    snake_names = [snake['name'] for snake in game_state['board']['snakes']]
+    print('SNAKES: %s' % ', '.join(snake_names))
     
 
 # end is called when your Battlesnake finishes a game
@@ -45,6 +91,9 @@ def end(game_state: typing.Dict):
     if game_state['you']['id'] in graph.target_cells.keys():
         del graph.target_cells[game_state['you']['id']]
     print("GAME OVER\n")
+    save_info_end(game_state)
+    snake_names = [snake['name'] for snake in game_state['board']['snakes']]
+    print('SNAKES REMAINING: %s' % ', '.join(snake_names))
 
 def move(game_state: typing.Dict) -> typing.Dict:
     graph = Graph((game_state['board']['width'], game_state['board']['height']))
@@ -53,6 +102,9 @@ def move(game_state: typing.Dict) -> typing.Dict:
     my_id = game_state['you']['id']
     my_name = game_state['you']['name']
     my_length = game_state['you']['length']
+
+    if my_name not in SNAKE_NAMES:
+        return {"move": 'up'}
 
     move_set = {
       (1, 0): "right", 
@@ -70,19 +122,19 @@ def move(game_state: typing.Dict) -> typing.Dict:
 
     occupied_cells = {}
     friend_ways = []
+    enemy_ways = []
     for snake in game_state['board']['snakes']:
         for num, cell in enumerate(snake['body']):
             occupied_cells[graph.convert_to_tuple(cell)] = snake['length'] - num + 1
 
-        if snake['id'] != my_id and snake['length'] >= my_length:
-            for move in move_set.keys():
-                future_pos = graph.sum(graph.convert_to_tuple(snake['head']), move)
+        if snake['id'] != my_id and snake['length'] >= my_length and my_name != snake['name']:
+            for future_pos in graph.get_neighbors(graph.convert_to_tuple(snake['head'])):
                 if future_pos not in occupied_cells.keys():
                     occupied_cells[future_pos] = snake['length'] + 1
+                    enemy_ways.append(future_pos)
 
-        if snake['id'] != my_id and my_name == snake['name']:
-            for move in move_set.keys():
-                future_pos = graph.sum(graph.convert_to_tuple(snake['head']), move)
+        elif snake['id'] != my_id and my_name == snake['name']:
+            for future_pos in graph.get_neighbors(graph.convert_to_tuple(snake['head'])):
                 if future_pos not in occupied_cells.keys():
                     occupied_cells[future_pos] = snake['length'] + 1
                     friend_ways.append(future_pos)
@@ -93,7 +145,7 @@ def move(game_state: typing.Dict) -> typing.Dict:
 
     position = graph.convert_to_tuple(game_state['you']['head'])
 
-    start_info = graph.get_neighbor_info(position, occupied_cells)
+    start_info = graph.get_neighbor_info(position, occupied_cells, game_state['you']['length'])
     closed_sides = []
     block_closed_sides = {}
     safe_cells = set()
@@ -109,20 +161,18 @@ def move(game_state: typing.Dict) -> typing.Dict:
 
     path = None
     if len(closed_sides) >= len(start_info.keys()) and len(blocked_future) != len(start_info.keys()):
-        print('DFS')
         path = dfs.choose_paths_to_scape(position, block_closed_sides, max_depth=15)
     elif len(blocked_future) != len(start_info.keys()):
         for side in closed_sides:
             occupied_cells[side] = 10 # Think about this if some change on a*
-            food_cells = food_cells - start_info[side]['cells']
+            if side in food_cells:
+                food_cells.remove(side)
+
+        food_cells &= safe_cells
 
         for k, v in graph.target_cells.items():
             if k != my_id and v is not None and v in food_cells:
                 food_cells.remove(v)
-
-        for food in list(food_cells):
-            if food in occupied_cells.keys():
-                food_cells.remove(food)
 
         if len(food_cells) == 0:
             for _ in range(3):
@@ -144,14 +194,36 @@ def move(game_state: typing.Dict) -> typing.Dict:
     if len(blocked_future) == len(start_info.keys()):
         for future in graph.get_neighbors(position):
             if future in friend_ways:
-                next_move = move_set[graph.difference(future, position)]
+                next_move = graph.difference(future, position)
     if path is None and next_move is None:
-        print("RANDOM")
-        next_move = choose_safe_random_move(game_state)
-        
+        print('RANDOM MOVE')
+        safe_moves = set(start_info.keys()) - blocked_future
+        if len(safe_moves) == 0:
+            all_moves = set([graph.difference(k, position) for k in start_info.keys()])
+            all_one_moves = [graph.difference(k, position) for k, v in occupied_cells.items() if v == 2]
+            possible_one_moves = all_moves & set(all_one_moves)
+            print(all_one_moves)
+            print(possible_one_moves)
+            possible_moves = all_moves & set([graph.difference(v, position) for v in enemy_ways])
+            print(enemy_ways)
+            print(possible_moves)
+            if len(possible_one_moves) > 0:
+                all_moves = possible_one_moves
+            if len(possible_moves) > 0:
+                all_moves = possible_moves
+            elif my_length > 1:
+                neck = graph.convert_to_tuple(game_state['you']['body'][1])
+                all_moves = all_moves - set([graph.difference(neck, position)])
+            order = {graph.difference(k, position): v['n_cells'] for k, v in start_info.items()}
+            next_move = max(list(all_moves), key=lambda x: order[x])
+        else:
+            rand_move = random.choice(list(safe_moves))
+            next_move = graph.difference(rand_move, position)
+
     elif next_move is None:
         next_move = graph.difference(path[1], position)
-        next_move = move_set[next_move]
+    
+    next_move = move_set[next_move]
 
     print(f"MOVE {game_state['turn']}: {next_move}")
     return {"move": next_move}

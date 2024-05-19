@@ -29,9 +29,6 @@ class DFS:
         paths = self.calculate_paths_to_goals(start, goals, max_depth)
         best_path = None
         best_distance = float('inf')
-
-        print('GOT %s paths' % len(paths))
-        print(paths)
         
         for path in paths:
             dist = self.graph.get_distance(start, path[-1])
